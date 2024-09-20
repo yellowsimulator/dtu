@@ -1,4 +1,13 @@
+
+"""
+A code to provision the VM.
+The base code was taken from the Azure documentation page:
+https://learn.microsoft.com/en-us/azure/developer/python/sdk/examples/azure-sdk-example-virtual-machines?tabs=cmd
+"""
+
+# Import the needed credential and management objects from the libraries.
 import os
+
 from azure.identity import DefaultAzureCredential
 from azure.mgmt.compute import ComputeManagementClient
 from azure.mgmt.network import NetworkManagementClient
@@ -17,16 +26,28 @@ VM_NAME = os.environ["VM_NAME"]
 USERNAME = os.environ["USERNAME"]
 PASSWORD = os.environ["PASSWORD"]
 
-print("Provisioning a virtual machine...some operations might take a minute or two.")
+print(
+    "Provisioning a virtual machine...some operations might take a \
+minute or two."
+)
 
 # Acquire a credential object.
 credential = DefaultAzureCredential()
 
+# Retrieve subscription ID from environment variable.
+subscription_id = os.environ["AZURE_SUBSCRIPTION_ID"]
+
+
+# Step 1: Provision a resource group
+
+# Obtain the management object for resources.
+resource_client = ResourceManagementClient(credential, subscription_id)
+
+
 # Obtain the management object for networks
 network_client = NetworkManagementClient(credential, subscription_id)
 
-#-------------------------------------------------------------------------------------
-# Step 1.1 - Provision the virtual network
+# Provision the virtual network and wait for completion
 poller = network_client.virtual_networks.begin_create_or_update(
     RESOURCE_GROUP_NAME,
     VNET_NAME,
@@ -35,55 +56,65 @@ poller = network_client.virtual_networks.begin_create_or_update(
         "address_space": {"address_prefixes": ["10.0.0.0/16"]},
     },
 )
-vnet_result = poller.result()
-print(f"Provisioned virtual network {vnet_result.name} with address prefixes {vnet_result.address_space.address_prefixes}")
 
-#-------------------------------------------------------------------------------------
-# Step 1.2 - Create a Network Security Group (NSG)
+vnet_result = poller.result()
+
+print(
+    f"Provisioned virtual network {vnet_result.name} with address \
+prefixes {vnet_result.address_space.address_prefixes}"
+)
+
+#--------------------------------------------------------------------------
+# Step 3: Provision the subnet and wait for completion
+# Step 3.1: Provision a Network Security Group
+NSG_NAME = "nsg-Yapi-Donatien-Achou"
 poller = network_client.network_security_groups.begin_create_or_update(
     RESOURCE_GROUP_NAME,
-    "myNSG",  # Name for the NSG
+    NSG_NAME,
     {
         "location": LOCATION,
         "security_rules": [
             {
                 "name": "AllowSSH",
                 "properties": {
-                    "protocol": "*",  # Allow all protocols
-                    "source_port_ranges": ["*"],  # Allow all source ports (as a list)
-                    "destination_port_ranges": ["22"],  # SSH port (as a list)
-                    "source_address_prefix": "*",  # Allow all source IP addresses
-                    "destination_address_prefix": "*",  # Allow all destination IP addresses
-                    "access": "Allow",  # Allow traffic
-                    "priority": 100,  # Rule priority
-                    "direction": "Inbound"  # Inbound traffic
-                }
+                    "protocol": "Tcp",
+                    "SourcePortRange": "*",
+                    "DestinationPortRange": "22",
+                    "SourceAddressPrefix": "*",
+                    "DestinationAddressPrefix": "*",
+                    "Access": "Allow",
+                    "Priority": 3400,
+                    "Direction": "Inbound",
+                },
             }
-        ]
-    }
+        ],
+    },
 )
 
 nsg_result = poller.result()
-print(f"Provisioned network security group {nsg_result.name}")
+print(f"Provisioned Network Security Group {nsg_result.name}")
 
-#------------------------------------------------------------------------------------
-# Step 1.3: Configure the subnet with the virtual network and associate NSG
 poller = network_client.subnets.begin_create_or_update(
     RESOURCE_GROUP_NAME,
     VNET_NAME,
     SUBNET_NAME,
-    {
-        "address_prefix": "10.0.0.0/24",
-        "network_security_group": {
-            "id": nsg_result.id  # Associate the NSG with the subnet
+    {"address_prefix": "10.0.0.0/24",
+     "network_security_group": {
+            "id": nsg_result.id 
         }
-    },
+
+     
+     },
 )
 subnet_result = poller.result()
-print(f"Provisioned virtual subnet {subnet_result.name} with address prefix {subnet_result.address_prefix} and associated NSG {nsg_result.name}")
 
-#-----------------------------------------------------------------------------------
-# Step 1.4: Provision an IP address and wait for completion
+print(
+    f"Provisioned virtual subnet {subnet_result.name} with address \
+prefix {subnet_result.address_prefix}"
+)
+
+#---------------------------------------------------------------------
+# Step 4: Provision an IP address and wait for completion
 poller = network_client.public_ip_addresses.begin_create_or_update(
     RESOURCE_GROUP_NAME,
     IP_NAME,
@@ -94,11 +125,16 @@ poller = network_client.public_ip_addresses.begin_create_or_update(
         "public_ip_address_version": "IPV4",
     },
 )
-ip_address_result = poller.result()
-print(f"Provisioned public IP address {ip_address_result.name} with address {ip_address_result.ip_address}")
 
-#----------------------------------------------------------------------------------
-# Step 1.5: Provision the network interface client
+ip_address_result = poller.result()
+
+print(
+    f"Provisioned public IP address {ip_address_result.name} \
+with address {ip_address_result.ip_address}"
+)
+
+#-----------------------------------------------------------------
+# Step 5: Provision the network interface client
 poller = network_client.network_interfaces.begin_create_or_update(
     RESOURCE_GROUP_NAME,
     NIC_NAME,
@@ -113,15 +149,25 @@ poller = network_client.network_interfaces.begin_create_or_update(
         ],
     },
 )
+
 nic_result = poller.result()
+
 print(f"Provisioned network interface client {nic_result.name}")
 
 #--------------------------------------------------------------------------------
-# Step 1.6: Provision the virtual machine
+# Step 6: Provision the virtual machine
 # Obtain the management object for virtual machines
 compute_client = ComputeManagementClient(credential, subscription_id)
 
-print(f"Provisioning virtual machine {VM_NAME}; this operation might take a few minutes.")
+
+print(
+    f"Provisioning virtual machine {VM_NAME}; this operation might \
+take a few minutes."
+)
+
+# Provision the VM specifying only minimal arguments, which defaults
+# to an Ubuntu 18.04 VM on a Standard DS1 v2 plan with a public IP address
+# and a default virtual network/subnet.
 
 poller = compute_client.virtual_machines.begin_create_or_update(
     RESOURCE_GROUP_NAME,
@@ -151,6 +197,7 @@ poller = compute_client.virtual_machines.begin_create_or_update(
         },
     },
 )
+
 vm_result = poller.result()
 
 print(f"Provisioned virtual machine {vm_result.name}")
