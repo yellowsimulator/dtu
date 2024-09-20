@@ -87,6 +87,32 @@ def get_top_category(path: str=os.path.join("data", "tourism_dataset.csv")):
     return df_top_three_category
 
 
+def save_analysis_results(path_country_aggregate: str, 
+                          path_to_category_aggregate: str)->None:
+    """
+    Saves the analysis results to csv.
+
+    Arguments:
+    ----------
+        path_country_aggregate: path to country aggregate data
+        path_to_category_aggregate: path to category aggregate
+
+    Returns
+    -------
+        None
+    """
+    df_country_agg = group_and_aggregate_data_by_country()
+    df_category_agg = get_top_category()
+    df_country_agg.to_csv(path_country_aggregate)
+    df_category_agg.to_csv(path_to_category_aggregate)
+    print(f"Saved country aggregate data to {path_country_aggregate}")
+    print(f"Saved category aggregate data to {path_to_category_aggregate}")
+
+
+
+
 if __name__ =="__main__":
-    df_aggregated = get_top_category()
-    print(df_aggregated)
+    base_path = "data"
+    path_country_aggregate = os.path.join(base_path,"country_aggregate_tourism_dataset.csv")
+    path_to_category_aggregate = os.path.join(base_path,"category_aggregate_tourism_dataset.csv")
+    save_analysis_results(path_country_aggregate, path_to_category_aggregate)
